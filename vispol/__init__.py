@@ -8,4 +8,6 @@ from .UCSvis import StokestoRGB, clipatmax, clipatperc, Jbounds, JabtoRGB, JMhto
 
 from .example import example
 
+from colorwheel import color_wheel
+
 from .version import __version__
