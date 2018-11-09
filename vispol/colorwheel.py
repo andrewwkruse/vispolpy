@@ -10,7 +10,6 @@ class color_wheel:
                  yspline=[0.0, 6.6, 13.7, 19.4, 26.4, 24.1, 0.0]):
         self.alpha_channel = np.zeros((size,size))
         M_array = np.zeros((size, size))
-        h_array = np.zeros((size, size))
         self.rgb = np.zeros((size, size, 3))
         radius = size / 2
 
@@ -37,13 +36,15 @@ class color_wheel:
         h_array = np.arctan2(ydist, xdist) * 2
 
         bounds = vispol.Jbounds(M_array, xspline, yspline)
-        J_array = (bounds[:,:, 1] + bounds[:,:, 0])/ 2
+        # J_array = (bounds[:,:, 1] + bounds[:,:, 0])/ 2
+        J_array = bounds[:,:,1]
         J_array[np.where(J_array == 0)] = 0.0001
         J_array, a_array, b_array = vispol.JMhtoJab(J_array, M_array, h_array)
-        ucs = np.concatenate((J_array, a_array, b_array), axis=-1)
+        ucs = np.dstack((J_array, a_array, b_array))
         self.rgb = vispol.JabtoRGB(J_array, a_array, b_array)
-        self.xyz = clr.cspace_convert(ucs.reshape((-1,3)), "CAM02-UCS", "XYZ100").reshape(ucs.shape)
-
+        self.xyz = clr.cspace_convert(ucs.reshape((-1,3)), "CAM02-UCS", "XYZ100").reshape(self.rgb.shape)
+        self.M = M_array
+        self.h = h_array
     def create_fig(self,
                    fignum= -1,
                    RTick= np.linspace(0, 1, 5),
@@ -56,11 +57,11 @@ class color_wheel:
         if fignum < 0 or not fignum % 1 == 0:
             self.fig = plt.figure()
         else:
-            self.fig = plt.figure(fig_num)
+            self.fig = plt.figure(fignum)
 
-        self.ax = self.fig.add_axes([0.10001, 0.1, 0.8, 0.8]) # for some reason you can't set axis coords the same for both?
-        # self.pax = plt.gca(projection = 'polar')
-        self.pax = self.fig.add_axes([0.1,0.1,.8,.8], projection='polar')
+        # for some reason you can't set axis coords the same for both. Setting ax and pax to within 0.00001
+        self.ax = self.fig.add_axes([0.10001, 0.1, 0.8, 0.8])
+        self.pax = self.fig.add_axes([0.1, 0.1, 0.8, 0.8], projection='polar')
         self.im = self.ax.imshow(np.dstack((self.rgb, self.alpha_channel)), aspect='equal')
         self.ax.set_axis_off()
         self.pax.set_yticks(RTick)

@@ -38,20 +38,3 @@ def dmask(delta, thresh=0.5, morph=True, struct=3, smooth=False, sigma=1):
         mask = gf(mask.astype(float), sigma) # reduces pixelation. Not applicable with mixed mapping from Tyo et al
                                              # only usable if P is multiplied by D prior to visualization
     return mask
-
-# import scipy.io as sio
-# import matplotlib.pyplot as plt
-# Trucks = sio.loadmat('C:\\Users\\z5052714\\Documents\\UNSW\\UNSW\\Data_Sets\\Julia Craven\\ProcessedData.mat')
-# StokesData = Trucks.get('StokesData')[:,:,:,0]
-# StokesData[:,:,0] = np.clip(StokesData[:,:,0],0,np.percentile(StokesData[:,:,0],99))
-# StokesData[:,:,1] = np.clip(StokesData[:,:,1],-1,1)
-# StokesData[:,:,2] = np.clip(StokesData[:,:,2],-1,1)
-#
-# # imdata = aolp.fun(StokesData[:,:,:,0]).transpose()
-# D = delta(StokesData)
-# M = dmask(D,.4,3, True, True, 2)
-# plt.imshow(D.transpose())
-# plt.colorbar()
-# plt.figure()
-# plt.imshow(M.transpose())
-# plt.show()

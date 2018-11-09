@@ -1,0 +1,56 @@
+Author: Andrew W Kruse
+Email: a.kruse@student.adfa.edu.au
+Send bug reports to corresponding email.
+
+vispol is a Python package for implementing the polarization visualization method defined in:
+Kruse, A. W., Alenin, A. S., Vaughn, I. J., & Tyo, J. S. (2018). Perceptually uniform color space for visualizing
+    trivariate linear polarization imaging data. Optics Letters, 43(11), 2426-2429. doi:10.1364/OL.43.002426
+
+INSTALLATION:
+vispol can be downloaded from PyPI at <pypi url>,
+or at <github url>
+or installed with pip:
+pip install vispol
+
+METHODS:
+The main methods to call are StokestoRGB or IPAtoRGB. StokestoRGB takes in a 3 dimensional array with the first
+two dimensions as spatial and the third is the Stokes parameters (S0, S1, S2). S3 does not need to be omitted however it
+won't affect the final result in any way. More info on Stokes formalism can be found at:
+https://en.wikipedia.org/wiki/Stokes_parameters
+
+IPAtoRGB is another method that converts linear polarization to color when the input is intensity, degree of
+polarization, and angle of polarization. Intensity and degree of polarization should be within the range of [0,1], and
+angle of polarization should be within the range [0,pi] or [-pi,pi].
+
+Additional functions can be passed to both IPAtoRGB and StokestoRGB if there are additional transformations to any of
+the values of intensity, degree of polarization, or angle of polarization. For example, a common transformation for the
+degree of polarization would be to clip the values at a certain threshold, and stretch the final result to the range
+[0,1], setting all values that were >= the threshold to be at 1. This is useful if there is not a significant amount of
+strong polarization. For either function, the method to implement it is to pass the function handle and other variables
+into the (I/P/A)bar_params. For the example mentioned, this would be in the form of
+Pbar_params = {'function' : clipatmax, 'params' : 0.5} # this is the dictionary version. Multiple params would be a list
+OR          = [clipatmax, 99] # list version
+OR          = [clipatmax, [99]] # nested list version, params are their own list inside the Pbar_params list
+
+where clipatmax is a function handle, which is given for you in UCSvis.py. These functions need to be in the form of
+fhandle(array, param1, param2, param3...), where array is the 2D array to be transformed.  This would then be passed to
+the other functions as
+IPAtoRGB = (I,P,A, Pbar_params = Pbar_params)
+OR
+StokestoRGB = (Stokes, Pbar_params = Pbar_params)
+
+Alternatively, these transformations can be done prior to calling IPAtoRGB.
+
+colorwheel.py is a file to produce a colorwheel map for interpreting the colors in the final RGB image. It includes the
+definition of a class color_wheel, and its method create_fig which produces a matplotlib figure. An example of usage
+would be
+cw = color_wheel(size = 256) # makes it a 256 x 256 color array
+# cw.rgb is now a 256x256 array of colors corresponding to the colorwheel
+# cw.alpha_channel is the same size array where values of 1 are opaque, and values <1 are more transparent. This is
+#   useful if saving an image file that supports transparency. Otherwise outside of the circle with be opaque white.
+cw.create_fig(fignum = 1) # if the value of the figure number is negative, it will create a new figure. Otherwise
+#                         # selects or opens the figure with that number
+# cw.fig is the figure handle
+# cw.ax is the cartesian axes that contain the displayed color array
+# cw.pax is the polar axes that are just used to put plot markings on top of the color array
+# cw.im is the image handle

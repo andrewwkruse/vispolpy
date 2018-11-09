@@ -4,10 +4,10 @@ from .aolp import StokestoAoLP as StA
 from .dop import StokestoDoLP as StD
 from .deltametric import delta, dmask
 
-def clipatperc(X,perc):
-    return np.clip(X/np.percentile(X,perc),0,1)
-def clipatmax(X,Max):
-    return np.clip(X/Max,0,1)
+def clipatperc(X, perc):
+    return np.clip(X / np.percentile(X, perc), 0, 1)
+def clipatmax(X, Max):
+    return np.clip(X/Max, 0, 1)
 
 def Jbounds(M, xspline, yspline):
     # determine bounds J'0 and J'1 given a set of spline points approximating gamut curve c
@@ -51,13 +51,15 @@ def ItoJ(I,bounds):
     J[np.isnan(I)] = 0
     return J
 
-def Atoh(A):
-    h = 2 * A #+ np.pi/1.75
+def Atoh(A, red_offset = False):
+    h = 2 * A
     h[np.isnan(A)] = 0
-    # offset so that hue 0 -> sRGB Red to make hues match previous methods closer
-    # Red = cs.cspace_convert([1, 0, 0], "sRGB1", "CAM02-UCS")
-    # Rhue = np.arctan(Red[1] / Red[2])
-    return h  #+ Rhue
+    # OPTIONAL: offset so that hue 0 -> sRGB Red to make hues match previous methods closer
+    if red_offset:
+        Red = cs.cspace_convert([1, 0, 0], "sRGB1", "CAM02-UCS")
+        Rhue = np.arctan(Red[1] / Red[2])
+        h += Rhue
+    return h
 
 def JMhtoJab(J,M,h):
     a = M * np.cos(h)
@@ -91,6 +93,12 @@ def StokestoRGB(S,
     #       'params' : if list, this is nested list, if dict this is a sub-dict
     #                  Other parameters that input into the function after the polarization array
     #   delta_params: either list or dictionary specifying Delta Mask parameters
+    #       ##################
+    #       Delta metric (Tyo et al 2016) is used to assess variability in angle of polarization. Depending on
+    #       instrument and other situational variables, there can be a significant amount of noise in the degree of
+    #       polarization. By setting a threshold of variability, the noise can be visibly reduced where the areas of
+    #       high variability have their degree of polarization set to zero.
+    #       ##################
     #       If list, only include the parameter values
     #       if dict, include parameter name as the key with a colon, followed by the paramater value
     #       'mask_on' : boolean, set to True for mask to be on. If the only param specified, rest will be default vals
@@ -116,6 +124,10 @@ def StokestoRGB(S,
         Ibar = Ibar_params['function'](I,**Ibar_params['params'])
     else:
         Ibar = I
+    nonnan = np.where(np.isnan(I))
+    if np.any(I[nonnan]<0) or np.any(I[nonnan]>1):
+        print('Reformatting Intensity (S0) to the range 0 to 1')
+        Ibar = np.clip(Ibar/np.amax(Ibar[nonnan]), 0, 1)
 
     P = StD(S)
 
@@ -150,7 +162,7 @@ def StokestoRGB(S,
                 Pbar *= Mask
         elif type(delta_params) is dict:
             if delta_params['mask_on']:
-                DM = delta(S, delta_params['element']) if 'element' in delta_params.keys() else dm.delta(S)
+                DM = delta(S, delta_params['element']) if 'element' in delta_params.keys() else delta(S)
                 Dmaskattr = delta_params['mask_params'] if 'mask_params' in delta_params.keys() else {}
                 Mask = dmask(DM,**Dmaskattr)
                 Pbar *= Mask
@@ -166,4 +178,35 @@ def StokestoRGB(S,
         Jab = np.stack([J, a, b], -1)
         return RGB, Jab
     else:
+        return RGB
+
+def IPAtoStokes(I, P = None, A = None, **kwargs):
+    # Intensity (I), degree of linear polarization (P), and angle of polarization (A), can be entered as:
+    #   3 individual NxM arrays
+    #   1 combined NxMx3 array entered in the place of I
+    # kwargs are the same as in StokestoRGB. They are directly passed to that function
+
+    if len(I.shape) > 2:
+        P = I[:,:,1]
+        A = I[:,:,2]
+        I = I[:,:,0]
+    nonnan = np.where(np.isnan(A))
+    if not (np.any(A[nonnan] < 0) or np.any(A[nonnan] > 1)):
+        print('Assuming input Angle of Polarization is in the range 0 to 1...\n')
+        print('Reformatting to the range 0 to pi')
+        # range is 0 to 1, set to 0 to pi
+        A *= np.pi
+
+    S1 = P * np.cos(2*A)
+    S2 = P * np.sin(2*A)
+    Stokes = np.dstack((I,S1,S2))
+    if 'returnUCS' in kwargs.keys():
+        if kwargs['returnUCS']:
+            RGB, Jab = StokestoRGB(Stokes, **kwargs)
+            return RGB, Jab
+        else:
+            RGB = StokestoRGB(Stokes, **kwargs)
+            return RGB
+    else:
+        RGB = StokestoRGB(Stokes, **kwargs)
         return RGB

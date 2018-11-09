@@ -3,9 +3,34 @@ import matplotlib.pyplot as plt
 import numpy as np
 from .UCSvis import clipatmax, clipatperc, StokestoRGB
 
-# This provides a quick implementation of StokestoRGB with a provided sample Stokes array
+# This provides a quick implementation of StokestoRGB with a provided simulated Stokes array
 
-def example(Ibar_params = None,
+def generate(out_type = 'Stokes'):
+    ################### Sample Stokes ###################
+    # out_type should be either 'Stokes' or 'IPA'
+
+    S0 = np.tile(np.linspace(0, 1, 100), (100, 1))
+    S0 *= np.random.uniform(.7, 1, (100, 100))  # add noise
+    # Example of false polarization signals:
+    # S1 and S2 are moderately high, but because the resulting AoLP has high variance, a delta mask would suppress it
+    S1 = np.random.uniform(-.4, .4, (100, 100))
+    S2 = np.random.uniform(-.4, .4, (100, 100))
+    # Actual polarized square
+    S1[25:75, 25:75] = np.random.uniform(0.3, 0.6, (50, 50))  # S1 is large while S1 is small so AoLP has low variance
+    S2[25:75, 25:75] = np.random.uniform(-0.1, 0.1, (50, 50))
+    S = np.stack((S0, S1, S2), -1)
+    ###############################
+    if out_type == 'Stokes':
+        return S
+    elif out_type == 'IPA':
+        P = np.sqrt(S1**2 + S2**2)
+        A = 0.5 * np.atan2(S2, S1)
+        IPA = np.dstack((S0, P, A))
+        return IPA
+    else:
+        raise ValueError('Please enter out_type as \'Stokes\' or \'IPA\'')
+def example(S,
+                Ibar_params = None,
                 Pbar_params = None,
                 Abar_params = None,
                 delta_params=None,
@@ -38,18 +63,7 @@ def example(Ibar_params = None,
         print('\t[True, 3, 0.4, 3, True, True, 2] (list version)')
         print('\t[True, 3, [0.4, 3, True, True, 2]] (nested list version)')
 
-    ################### Sample Stokes ###################
-    S0 = np.tile(np.linspace(0,1,100),(100,1))
-    S0 *= np.random.uniform(.7,1,(100,100)) # add noise
-    # Example of false polarization signals:
-    # S1 and S2 are moderately high, but because the resulting AoLP has high variance, a delta mask would suppress it
-    S1 = np.random.uniform(-.4, .4, (100, 100))
-    S2 = np.random.uniform(-.4, .4, (100, 100))
-    # Actual polarized square
-    S1[25:75,25:75] = np.random.uniform(0.3,0.6,(50,50))
-    S2[25:75,25:75] = np.random.uniform(-0.1,0.1,(50,50))
-    S = np.stack((S0, S1, S2),-1)
-    ###############################
+
 
     out = StokestoRGB(S,
                       Ibar_params,
