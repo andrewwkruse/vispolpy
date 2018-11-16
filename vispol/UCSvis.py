@@ -72,6 +72,7 @@ def JabtoRGB(J,a,b, space='sRGB1'):
     J = np.reshape(J, -1)
     a = np.reshape(a, -1)
     b = np.reshape(b, -1)
+    J[np.where(J < 0.0000001)] = 0.0000001 # avoid divide by zero
     RGB = np.clip(cs.cspace_convert(np.stack([J,a,b],-1), "CAM02-UCS", space), 0, 1)
     return np.reshape(RGB, s)
 
@@ -180,7 +181,7 @@ def StokestoRGB(S,
     else:
         return RGB
 
-def IPAtoStokes(I, P = None, A = None, **kwargs):
+def IPAtoRGB(I, P = None, A = None, **kwargs):
     # Intensity (I), degree of linear polarization (P), and angle of polarization (A), can be entered as:
     #   3 individual NxM arrays
     #   1 combined NxMx3 array entered in the place of I
