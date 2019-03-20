@@ -44,11 +44,13 @@ def StokestoVideo(out_file,
     else:
         RGB_frames = StokestoFrames(Stokes_frames, progress=progress, **kwargs)
 
+
     try:
-        RGB_frames = np.asarray(256 * RGB_frames, dtype='uint8')
+        RGB_frames = np.asarray(np.round(255 * RGB_frames), dtype='uint8')
     except MemoryError:
         for number, frame in enumerate(RGB_frames):
-            RGB_frames[number, :,:,:] = np.array(256 * frame, dtype='uint8')
+            RGB_frames[number, :,:,:] = np.round(255 * frame)
+        RGB_frames = RGB_frames.astype('uint8', copy=False)
     print('Attempting to write video to ' + out_file)
     try:
         imageio.mimwrite(out_file, RGB_frames, fps=fps, macro_block_size=None)

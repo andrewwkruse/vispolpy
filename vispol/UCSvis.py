@@ -174,7 +174,7 @@ def StokestoRGB(S,
     J = ItoJ(Ibar, Jb)
     h = Atoh(Abar)
     J, a, b = JMhtoJab(J, M, h)
-    RGB = JabtoRGB(J, a, b, space)
+    RGB = JabtoRGB(J, a, b, space).astype('float32')
     if returnUCS:
         Jab = np.stack([J, a, b], -1)
         return RGB, Jab
@@ -191,7 +191,7 @@ def IPAtoRGB(I, P = None, A = None, **kwargs):
         P = I[:,:,1]
         A = I[:,:,2]
         I = I[:,:,0]
-    nonnan = np.where(np.isnan(A))
+    nonnan = np.where(1 - np.isnan(A))
     if not (np.any(A[nonnan] < 0) or np.any(A[nonnan] > 1)):
         print('Assuming input Angle of Polarization is in the range 0 to 1...\n')
         print('Reformatting to the range 0 to pi')

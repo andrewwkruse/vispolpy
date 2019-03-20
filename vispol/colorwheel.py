@@ -1,6 +1,8 @@
 import numpy as np
-import vispol
+from .UCSvis import Jbounds, JMhtoJab, JabtoRGB
 import matplotlib.pyplot as plt
+import matplotlib.figure as mf
+import matplotlib.axes as ma
 import colorspacious as clr
 
 class color_wheel:
@@ -35,18 +37,21 @@ class color_wheel:
 
         h_array = np.arctan2(ydist, xdist) * 2
 
-        bounds = vispol.Jbounds(M_array, xspline, yspline)
+        bounds = Jbounds(M_array, xspline, yspline)
         # J_array = (bounds[:,:, 1] + bounds[:,:, 0])/ 2
         J_array = bounds[:,:,1]
         J_array[np.where(J_array == 0)] = 0.0001
-        J_array, a_array, b_array = vispol.JMhtoJab(J_array, M_array, h_array)
+        J_array, a_array, b_array = JMhtoJab(J_array, M_array, h_array)
         ucs = np.dstack((J_array, a_array, b_array))
-        self.rgb = vispol.JabtoRGB(J_array, a_array, b_array)
+        self.rgb = JabtoRGB(J_array, a_array, b_array)
         self.xyz = clr.cspace_convert(ucs.reshape((-1,3)), "CAM02-UCS", "XYZ100").reshape(self.rgb.shape)
         self.M = M_array
         self.h = h_array
+
     def create_fig(self,
-                   fignum= -1,
+                   ax=None,
+                   figure=None,
+                   fignum = -1,
                    RTick= np.linspace(0, 1, 5),
                    RLabel= np.linspace(0, 1, 5),
                    ThetaTick= np.linspace(0, 2 * np.pi, 12, endpoint=False),
@@ -54,14 +59,35 @@ class color_wheel:
                                                np.linspace(0, 180, 6, endpoint=False, dtype=int)),
                                               axis=0)):
 
-        if fignum < 0 or not fignum % 1 == 0:
-            self.fig = plt.figure()
-        else:
-            self.fig = plt.figure(fignum)
+        # determing figure, axes, and polar axes for colorwheel
+        # priority is ax, then figure, then fignum if multiple params entered
+        # if ax is given, colorwheel is plotted on that axis
+        # if figure is given, axes are created for plotting
+        # if fignum is given, figure is set to fignum and axes are created
+        # if nothing is given, new figure is created
 
+        if isinstance(ax, ma.Axes):
+            self.fig = ax.figure
+            self.ax = ax
+            self.pax = self.fig.add_axes(self.ax.get_position(), projection='polar')
+
+        elif isinstance(figure, mf.Figure):
+            self.fig = figure
+            self.ax = self.fig.add_axes([0.10001, 0.1, 0.8, 0.8])
+            self.pax = self.fig.add_axes([0.1, 0.1, 0.8, 0.8], projection='polar')
+
+        elif not (fignum < 0 or not fignum % 1 == 0):
+            self.fig = plt.figure(fignum)
+            self.ax = self.fig.add_axes([0.10001, 0.1, 0.8, 0.8])
+            self.pax = self.fig.add_axes([0.1, 0.1, 0.8, 0.8], projection='polar')
+
+        else:
+            self.fig = plt.figure()
+            self.ax = self.fig.add_axes([0.10001, 0.1, 0.8, 0.8])
+            self.pax = self.fig.add_axes([0.1, 0.1, 0.8, 0.8], projection='polar')
         # for some reason you can't set axis coords the same for both. Setting ax and pax to within 0.00001
-        self.ax = self.fig.add_axes([0.10001, 0.1, 0.8, 0.8])
-        self.pax = self.fig.add_axes([0.1, 0.1, 0.8, 0.8], projection='polar')
+
+
         self.im = self.ax.imshow(np.dstack((self.rgb, self.alpha_channel)), aspect='equal')
         self.ax.set_axis_off()
         self.pax.set_yticks(RTick)
