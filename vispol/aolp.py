@@ -1,6 +1,56 @@
 import numpy as np
-from .deltametric import delta, dmask
+from .deltametric import delta, delta_aop, dmask
+from scipy.signal import convolve2d as conv
 
+
+def circular_mean(angles, weights=None, interval='auto'):
+    weight_err = 'Weights must be an array or list with the same size as the input array of angles or None'
+    angles_err = 'Input angles must be an array or list'
+    interr = 'interval must be a list, tuple, or array of length 2 or \'auto\''
+
+    if type(angles) in [list, tuple]:
+        a = np.array(angles)
+    elif type(angles) is np.ndarray:
+        a = angles
+    else:
+        raise ValueError(angles_err)
+
+    if weights is None:
+        w = np.ones_like(a)
+    elif type(weights) in [list, tuple]:
+        w = np.array(weights)
+        if not w.shape == a.shape:
+            raise ValueError(weight_err)
+    elif type(weights) is np.ndarray:
+        w = weights
+    else:
+        raise ValueError(weight_err)
+
+    if interval is 'auto':
+        [bottom, top] = detect_range(a, readout=False)
+        if bottom is None:
+            raise ValueError('Cannot detect interval for input. Rerun with interval input specified')
+    else:
+        try:
+            if len(interval) == 2:
+                [bottom, top] = interval
+            else:
+                raise ValueError(interr)
+
+        except:
+            raise ValueError(interr)
+
+    a_pi = np.pi * (a - bottom) / (top - bottom)
+    cosa = np.cos(2.0 * a_pi)
+    sina = np.sin(2.0 * a_pi)
+    average_a = np.arctan2(np.sum(sina * w, axis=-1), np.sum(cosa * w, axis=-1)) / 2.0
+    if type(average_a) in [float, np.float64, np.float32]:
+        if average_a < 0:
+            average_a += np.pi
+    else:
+        average_a[np.where(average_a < 0)] += np.pi
+    scaled = (average_a / np.pi) * (top - bottom) + bottom
+    return scaled
 
 def StokestoAoLP(S):
 # function to calculate AoLP of 2D array of Stokes vectors (as in an image)
@@ -45,13 +95,18 @@ def StokestoAoLP_masked(S, **delta_params):
     aolp_array = np.where(delta_mask, aolp_array, np.nan) # where mask is false replace with nan
     return aolp_array
 
-def detect_range(aop, badvals=np.nan, readout=True):
-    try:
-        test = len(badvals)
-    except:
-        badvals = [badvals]
+def detect_range(aop, badvals=None, readout=True):
+    if badvals is not None:
 
-    goodvals = np.array([a for a in aop.flatten() if a not in badvals])
+        try:
+            _ = len(badvals)
+        except:
+            badvals = [badvals]
+
+        goodvals = np.array([a for a in aop.flatten() if a not in badvals and not np.isnan(a)])
+    else:
+        goodvals = np.array([a for a in aop.flatten() if not np.isnan(a)])
+
     maxval = max(goodvals)
     minval = min(goodvals)
     ninetynine_percentile = np.percentile(goodvals, 99.9)
@@ -59,7 +114,7 @@ def detect_range(aop, badvals=np.nan, readout=True):
 
     possible_tops = np.array([1.0, np.pi/2.0, np.pi, 90.0, 180.0])
     possible_bottoms = np.array([-90.0, -np.pi/2.0, 0.0])
-
+    possible_tops_ranges = np.array([1.0, np.pi, np.pi, 180.0, 180.0])
 
     max_diff = np.abs(possible_tops - maxval)
     min_diff = np.abs(possible_bottoms - minval)
@@ -68,31 +123,36 @@ def detect_range(aop, badvals=np.nan, readout=True):
 
     close = 0.05
 
-    if min(max_diff) >= min(ninetynine_diff):
-        top = possible_tops[np.argmin(max_diff)]
-        print('max: ', np.abs(top - min(max_diff)) / max([min(max_diff), top]))
-        if np.abs(top - min(max_diff)) / max([min(max_diff), top]) > close:
-            top = None
-    else:
-        top = possible_tops[np.argmin(ninetynine_diff)]
-        print('99: ', np.abs(top - min(ninetynine_diff)) / max([min(ninetynine_diff), top]))
-        if np.abs(top - min(ninetynine_diff)) / max([min(ninetynine_diff), top]) > close:
-            top = None
+    max_index = np.argmin(max_diff)
+    ninetynine_index = np.argmin(ninetynine_diff)
 
-    if min(min_diff) >= min(first_diff):
-        bottom = possible_tops[np.argmin(min_diff)]
-        print('min: ', np.abs(bottom - min(min_diff)) / max([min(min_diff), bottom]))
-        if np.abs(bottom - min(min_diff)) / max([min(min_diff), bottom]) > close:
-            bottom = None
+    if max_diff[max_index] <= ninetynine_diff[ninetynine_index]:
+        top = possible_tops[max_index]
+        rangeof = possible_tops_ranges[max_index]
+        checktop = np.abs(top - maxval) / rangeof
     else:
-        bottom = possible_tops[np.argmin(first_diff)]
-        print('1: ', np.abs(bottom - min(first_diff)) / max([min(first_diff), bottom]))
-        if np.abs(bottom - min(first_diff)) / max([min(first_diff), bottom]) > close:
-            bottom = None
+        top = possible_tops[ninetynine_index]
+        rangeof = possible_tops_ranges[ninetynine_index]
+        checktop = np.abs(top - ninetynine_percentile) / rangeof
+
+    if checktop > close:
+        return [None, None]
+
+    min_index = np.argmin(min_diff)
+    first_index = np.argmin(first_diff)
+
+    if min_diff[min_index] <= first_diff[first_index]:
+        bottom = possible_bottoms[min_index]
+        checkbottom = np.abs(bottom - minval) / rangeof
+    else:
+        bottom = possible_bottoms[min_index]
+        checkbottom = np.abs(bottom - minval) / rangeof
+
+    if checkbottom > close:
+        return [None, None]
 
     if top is None or bottom is None:
-        top = None
-        bottom = None
+        return [None, None]
 
     if readout:
         print('Max Value = {} \n'
@@ -103,10 +163,10 @@ def detect_range(aop, badvals=np.nan, readout=True):
                                               ninetynine_percentile,
                                               first_percentile))
         if top is not None:
-            print('Estimated range is {}, {}'.format(top, bottom))
+            print('Estimated range is {}, {}'.format(bottom, top))
         else:
             print('Cannot estimate range')
-    return [top, bottom]
+    return [bottom, top]
 
 def colormap(isoluminant=False):
     # this creates a periodic colormap appropriate for AoP
@@ -132,17 +192,52 @@ def LUT_matching(aop, lut):
     # locates closest values in aop array to the first row of the lut and replaces with
     # corresponding values in second row of lut
 
-    aop_matched = np.array([lut[1,np.argmin(np.abs(a - lut[0]))]
-                            if not np.isnan(a) else np.nan
+    # If tick locations are put in for aop, you will get back the transformed tick locations
+
+    aop_matched = np.array([lut[1,np.argmin(np.abs(a - lut[0]))] if not np.isnan(a) else np.nan
                             for idx, a in np.ndenumerate(aop)]
                            ).reshape(aop.shape)
 
     return aop_matched
 
-def histogram_eq(aop, bins='fd', interval='auto', **delta_params):
+def histogram_eq(aop,
+                 bins='fd',
+                 box = None,
+                 interval='auto',
+                 weighted=False,
+                 min_change = 0.0,
+                 suppress_noise=False,
+                 deltas=None,
+                 histogram=None,
+                 **delta_params):
+    boxerr = 'box must be 2x2 array like [[row_start, row_end], [column_start, column_end]]'
+    if type(box) in [list, tuple]:
+        try:
+            box = np.array(box)
+        except:
+            raise ValueError(boxerr)
+
+    if box is None:
+        hist_region = np.ones_like(aop, dtype=bool)
+
+    elif type(box) is np.ndarray:
+        if box.shape == aop.shape:
+            hist_region = box
+        elif box.shape == (2, 2):
+            rowstart, rowend = box[0]
+            colstart, colend = box[1]
+            hist_region = np.zeros_like(aop, dtype=bool)
+            hist_region[rowstart:rowend, colstart:colend] = True
+        else:
+            raise ValueError(boxerr)
+    else:
+        raise ValueError(boxerr)
+
     interr = 'interval must be a list, tuple, or array of length 2 or \'auto\''
     if interval is 'auto':
-        [top, bottom] = detect_range(aop, readout=False)
+        [bottom, top] = detect_range(aop, readout=False)
+        if bottom is None:
+            raise ValueError('Cannot detect interval for input. Rerun with interval input specified')
     else:
         try:
             if len(interval) == 2:
@@ -153,35 +248,104 @@ def histogram_eq(aop, bins='fd', interval='auto', **delta_params):
         except:
             raise ValueError(interr)
 
-    delta_array = delta(S, element=delta_params['element']) if 'element' in delta_params else delta(S)
-    mask_params = {}
-    for p in ['thresh', 'morph', 'struct']:
-        if p in delta_params.keys():
-            mask_params[p] = delta_params[p]
-    delta_mask = dmask(delta_array, **mask_params)
-    aop_masked = np.where(delta_mask, aop, np.nan)  # where mask is false replace with nan
-    aop_flat = np.array([a for idx, a in np.ndenumerate(aop_masked) if not np.isnan(a)])
-    total_pixels = float(len(aop_flat))
+    deltaerr = 'Input deltas must be array with the same shape as aop'
+    if deltas is None:
+        aop_pi = np.pi * (aop - bottom) / (top - bottom)
+        delta_array = delta_aop(aop_pi, element=delta_params['element']) \
+            if 'element' in delta_params else delta_aop(aop_pi)
+    else:
+        try:
+            if deltas.shape == aop.shape:
+                delta_array = deltas
+            else:
+                raise ValueError(deltaerr)
+        except:
+            raise ValueError(deltaerr)
 
-    counts, edges = np.histogram(aop_flat, bins=bins)
-    pdf = counts / total_pixels
+    if histogram is None:
+        aop_good = aop[hist_region] # select values indicated by box
+        aop_not_nans = ~np.isnan(aop_good)
+        aop_good = aop_good[aop_not_nans] # remove nan from array
+        if weighted:
+            delta_array = delta_array[hist_region]
+            delta_array = delta_array[aop_not_nans]
+            weights = 1 - delta_array
+            weights[np.isnan(weights)] = 0
+            # for weighted data you can't automate bin edges so they have to be initialized first
+            edges = np.histogram_bin_edges(aop_good, bins=bins)
+            counts, edges = np.histogram(aop_good, bins=edges, weights=weights)
+
+        else:
+            mask_params = {}
+            for p in ['thresh', 'morph', 'struct']:
+                if p in delta_params.keys():
+                    mask_params[p] = delta_params[p]
+            delta_mask = dmask(delta_array, **mask_params)
+            delta_mask = delta_mask[hist_region]
+            delta_mask = delta_mask[aop_not_nans]
+            aop_masked = np.where(delta_mask, aop_good, np.nan)  # where mask is false replace with nan
+            counts, edges = np.histogram(aop_masked, bins=bins)
+    else:
+        counts, edges = histogram
+
+    pdf = counts / np.sum(counts)
+    old_levels = edges[:-1]  # leftmost bin edges used for original pixel values
+    num_bins = len(old_levels)
+    if min_change < 1.0:
+        # d is the scalar amount added to the pdf s.t. the derivative of the lut is always greater than min_change
+        # min_change = 0 returns lut as it would normally
+        # as min_change -> 1, lut becomes more linear
+        # e.g. if min_change = 0.5, the returned LUT can only "shrink" parts to half of the normal rate
+        d = min_change / (num_bins * (1 - min_change))
+        pdf += d
+        pdf /= np.sum(pdf)
+    else:
+        # if min_change is 1, calculation of d has div0, so instead return a uniform pdf
+        pdf = 1.0 / num_bins * np.ones_like(pdf)
+
     cdf = np.cumsum(pdf)
 
-    old_levels = edges[:-1] # leftmost bin edges used for original pixel values
     new_levels = cdf * (top - bottom) + bottom
-    lut = np.hstack((old_levels, new_levels))
+    lut = np.stack((old_levels, new_levels))
+
     aop_equalised = LUT_matching(aop, lut)
+
+    if suppress_noise:
+        aop_eq_pi = np.pi * (aop_equalised - bottom) / (top - bottom)
+        if 'element' in delta_params:
+            delta_eq = delta_aop(aop_eq_pi, element=delta_params['element'])
+            if type(delta_params['element']) in [int, float]:
+                neighborhood = np.ones((delta_params['element'], delta_params['element']))
+            else:
+                neighborhood = delta_params['element']
+        else:
+            neighborhood = np.ones((3,3))
+            delta_eq = delta_aop(aop_eq_pi)
+
+
+        cos_average = conv(np.cos(2 * aop_eq_pi), neighborhood, 'same')
+        sin_average = conv(np.sin(2 * aop_eq_pi), neighborhood, 'same')
+        aop_average = np.arctan2(sin_average, cos_average) / 2
+        aop_average[aop_average < 0] += np.pi
+
+        aop_both = np.dstack((aop_average, aop_eq_pi))
+        weights = np.dstack((delta_eq, 1.0 - delta_eq))
+        aop_equalised = circular_mean(aop_both, weights=weights, interval=[0, np.pi])
+        aop_equalised = (aop_equalised + bottom) * (top - bottom) / np.pi
     return aop_equalised, lut
 
-def histogram_eq_Stokes(S, bins='fd', interval='auto', **delta_params):
+def histogram_eq_Stokes(S, bins='fd', interval='auto', weighted=False, min_change = 0.0, **delta_params):
     aop = StokestoAoLP(S)
-    aop_equalised, lut = histogram_eq(aop, bins=bins, interval=interval, **delta_params)
+    aop_equalised, lut = histogram_eq(aop, bins=bins, interval=interval, weighted=weighted, min_change=min_change,
+                                      **delta_params)
     return aop_equalised, lut
 
 def colormap_delta(aop,
                    background=[0.0,0.0,0.0],
+                   deltas = None,
                    method='opacity',
                    isoluminant=False,
+                   interval='auto',
                    **kwargs):
     if method in ['opacity', 'Opacity']:
         mask = False
@@ -209,25 +373,47 @@ def colormap_delta(aop,
             if b < 0 or b > 1:
                 raise ValueError(bg_error)
 
+    aoperr = 'Input aop must be NxM array'
     try:
-        dims = aop.shape()
+        dims = aop.shape
         if not len(dims) == 2:
-            raise ValueError('Input aop must be NxM array')
+            raise ValueError(aoperr)
     except:
-        raise ValueError('Input aop must be NxM array')
+        raise ValueError(aoperr)
 
+    interr = 'interval must be a list, tuple, or array of length 2 or \'auto\''
+    if interval is 'auto':
+        [bottom, top] = detect_range(aop, readout=False)
+        if bottom is None:
+            raise ValueError('Cannot detect interval for input. Rerun with interval input specified')
+    else:
+        try:
+            if len(interval) == 2:
+                [bottom, top] = interval
+            else:
+                raise ValueError(interr)
+
+        except:
+            raise ValueError(interr)
+
+    aop_pi = np.pi * (aop - bottom) / (top - bottom)
     cmap = colormap(isoluminant)
-    colors = cmap(aop / np.pi + .5)
-    aop_delta = delta(S)
+    colors = cmap(aop_pi / np.pi)
+    if deltas is None:
+        delta_array = delta_aop(aop_pi, element=kwargs['element']) if 'element' in kwargs else delta_aop(aop_pi)
+    else:
+        delta_array = deltas
+
     if mask:
         params = {}
         for p in ['thresh', 'morph', 'struct', 'smooth', 'sigma']:
             if p in kwargs.keys():
                 params[p] = kwargs[p]
-        alpha = dmask(aop_delta, **params)
+        alpha = dmask(delta_array, **params)
     else:
-        alpha = 1 - aop_delta
+        alpha = 1 - delta_array
 
+    alpha = np.where(~np.isnan(alpha), alpha, 0)
     colors[:,:,3] = alpha
     rgb = rgba2rgb(colors, background)
 

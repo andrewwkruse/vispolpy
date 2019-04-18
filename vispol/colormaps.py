@@ -162,13 +162,19 @@ def BlueWhiteGray():
     rc("BlueWhiteGray", cmap)
     return cmap
 
-def cbar(im, ax, aspect=20, pad_fraction=0.5, **cbar_kwargs):
+# class cbar(im, ax, aspect=20, pad_fraction=0.5, **cbar_kwargs):
+#     def __init__(self):
+#
+
+def cbar(ax, aspect=20, pad_fraction=0.5, **cbar_kwargs):
     from mpl_toolkits.axes_grid1 import make_axes_locatable, axes_size
     from matplotlib.pyplot import colorbar
+    from matplotlib.colorbar import ColorbarBase
 
     divider = make_axes_locatable(ax)
     width = axes_size.AxesY(ax, aspect=1. / aspect)
     pad = axes_size.Fraction(pad_fraction, width)
     cax = divider.append_axes("right", size=width, pad=pad)
-    c = colorbar(im, cax=cax, **cbar_kwargs)
+    c = ColorbarBase(cax, **cbar_kwargs)
+    # c = colorbar(im, cax=cax, norm=norm, **cbar_kwargs)
     return c
