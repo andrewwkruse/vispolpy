@@ -41,6 +41,26 @@ def Jbounds(M, xspline, yspline):
                         bounds[idx][1] = xspline[i]
     return bounds
 
+def Mbound(J, xspline, yspline):
+    # determine bounds M'0 and M'1 given a set of spline points approximating gamut curve c
+    # inputs:
+    #   M: colorfulness array representing DoLP
+    #   xspline : set of J' points approximating curve c
+    #   yspline : set of M' points approximating curve c
+    slopes = []
+    bounds = np.zeros((J.shape[0], J.shape[1]))  # create empty array to place bounds into
+    # find slopes between spline points
+    for i in range(len(yspline) - 1):
+        slopes.extend([(xspline[i + 1] - xspline[i]) / (yspline[i + 1] - yspline[i])])
+    # solve piecewise function for c(J') = M
+    for idx, jp in np.ndenumerate(J):
+        closest_idx = np.argmin(np.abs(xspline - jp))
+        if xspline[closest_idx] >= jp or abs(xspline[closest_idx] - jp) < 0.00001:
+            closest_idx -= 1
+
+        bounds[idx] = (jp - xspline[closest_idx]) / slopes[closest_idx] + yspline[closest_idx]
+    return bounds
+
 def PtoM(P,yspline):
     M = P * max(yspline)
     M[np.isnan(P)] = 0
@@ -84,6 +104,7 @@ def StokestoRGB(S,
                 xspline=[0, 5, 20, 40, 73, 77, 100],
                 yspline=[0.0, 6.6, 13.7, 19.4, 26.4, 24.1, 0.0],
                 returnUCS = False,
+                dependent = 'I',
                 space='sRGB1'):
     # inputs:
     #   S: n x m x 2,3, or 4 Stokes array
@@ -168,10 +189,21 @@ def StokestoRGB(S,
                 Mask = dmask(DM,**Dmaskattr)
                 Pbar *= Mask
 
+    if not dependent is 'I':
+        J = max(xspline) * Ibar
+        M = Pbar * Mbound(J, xspline, yspline)
 
-    M = PtoM(Pbar,yspline)
-    Jb = Jbounds(M, xspline, yspline)
-    J = ItoJ(Ibar, Jb)
+    else:
+        M = PtoM(Pbar,yspline)
+        Jb = Jbounds(M, xspline, yspline)
+        J = ItoJ(Ibar, Jb)
+
+    import matplotlib.pyplot as plt
+    f, ax = plt.subplots(1, 3)
+    ax[0].imshow(M, vmin=0, vmax=40)
+    ax[1].imshow(Pbar, vmin=0, vmax=1)
+    ax[2].imshow(J, vmin=0, vmax=100)
+
     h = Atoh(Abar)
     J, a, b = JMhtoJab(J, M, h)
     RGB = JabtoRGB(J, a, b, space).astype('float32')

@@ -7,8 +7,23 @@ from scipy.signal import convolve2d as conv
 np.seterr(invalid='ignore')
 
 # functions to calculate Delta metric and mask from stokes
-# Last edited 10:44 09/02/2018 by AWK
+# Last edited 09/05/2019 by AWK
 
+def circstd(aop, element=3):
+    if type(element) in [int, float]:
+        neighborhood = np.ones((element, element))
+    elif not type(element) in [np.ndarray, list]:
+        neighborhood = np.ones((3,3))
+    else:
+        neighborhood = element
+
+    N = conv(np.ones((aop.shape[0], aop.shape[1])), neighborhood, 'same')
+    ca = np.cos(2 * aop)
+    sa = np.sin(2 * aop)  # sin AoLP
+    cam = conv(ca, neighborhood, 'same') / N  # averaged cosine
+    sam = conv(sa, neighborhood, 'same') / N  # averaged sine
+    R = np.hypot(sam, cam)
+    return np.sqrt(-2 * np.log(R)) / 2.0
 
 def delta(S,element=3):
     # inputs:

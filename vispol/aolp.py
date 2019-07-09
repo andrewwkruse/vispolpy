@@ -1,7 +1,9 @@
 import numpy as np
 from .deltametric import delta, delta_aop, dmask
-from scipy.signal import convolve2d as conv
-
+from scipy.signal import convolve2d
+from scipy.ndimage import gaussian_filter
+from scipy.signal import convolve2d
+from scipy.sparse import diags
 
 def circular_mean(angles, weights=None, interval='auto'):
     weight_err = 'Weights must be an array or list with the same size as the input array of angles or None'
@@ -43,7 +45,8 @@ def circular_mean(angles, weights=None, interval='auto'):
     a_pi = np.pi * (a - bottom) / (top - bottom)
     cosa = np.cos(2.0 * a_pi)
     sina = np.sin(2.0 * a_pi)
-    average_a = np.arctan2(np.sum(sina * w, axis=-1), np.sum(cosa * w, axis=-1)) / 2.0
+    # average_a = np.arctan2(np.sum(sina * w, axis=-1), np.sum(cosa * w, axis=-1)) / 2.0
+    average_a = np.arctan2(np.sum(sina * w), np.sum(cosa * w)) / 2.0
     if type(average_a) in [float, np.float64, np.float32]:
         if average_a < 0:
             average_a += np.pi
@@ -241,7 +244,7 @@ def histogram_eq(aop,
     else:
         try:
             if len(interval) == 2:
-                [top, bottom] = interval
+                [bottom, top] = interval
             else:
                 raise ValueError(interr)
 
@@ -322,9 +325,8 @@ def histogram_eq(aop,
             neighborhood = np.ones((3,3))
             delta_eq = delta_aop(aop_eq_pi)
 
-
-        cos_average = conv(np.cos(2 * aop_eq_pi), neighborhood, 'same')
-        sin_average = conv(np.sin(2 * aop_eq_pi), neighborhood, 'same')
+        cos_average = convolve2d(np.cos(2 * aop_eq_pi), neighborhood, 'same')
+        sin_average = convolve2d(np.sin(2 * aop_eq_pi), neighborhood, 'same')
         aop_average = np.arctan2(sin_average, cos_average) / 2
         aop_average[aop_average < 0] += np.pi
 
@@ -438,6 +440,185 @@ def rgba2rgb(rgba, background):
     # reformat back to original shape
     rgb = np.moveaxis(rgb, 0, 2)
     return rgb
+
+def sobel_aop_single(aop, type='x', sigma=None, mode='same', center=True):
+    if type in ['x', 'X']:
+        # kernel = np.array([[-1, -2, -1],
+        #                    [ 0,  0,  0],
+        #                    [ 1,  2,  1]])
+        if center:
+            kernel1 = np.array([[1, 2, 1],
+                                [0, 0, 0],
+                                [0, 0, 0]])
+
+            kernel2= np.array([[0, 0, 0],
+                                [0, 0, 0],
+                                [1, 2, 1]])
+        else:
+            kernel1 = np.array([[1, 2, 1],
+                                [0, 0, 0],
+                                [0, 0, 0]])
+
+            kernel2 = np.array([[0, 0, 0],
+                                [1, 2, 1],
+                                [0, 0, 0]])
+    elif type in ['y', 'Y']:
+        # kernel = np.array([[-1, 0, 1],
+        #                    [-2, 0, 2],
+        #                    [-1, 0, 1]])
+        if center:
+            kernel1 = np.array([[1, 0, 0],
+                                [2, 0, 0],
+                                [1, 0, 0]])
+
+            kernel2 = np.array([[0, 0, 1],
+                                [0, 0, 2],
+                                [0, 0, 1]])
+        else:
+            kernel1 = np.array([[1, 0, 0],
+                                [2, 0, 0],
+                                [1, 0, 0]])
+
+            kernel2 = np.array([[0, 1, 0],
+                                [0, 2, 0],
+                                [0, 1, 0]])
+
+    else:
+        raise ValueError('type must be \'x\' or \'y\'')
+    cosA = np.cos(2 * aop)
+    sinA = np.sin(2 * aop)
+    if not sigma is None:
+        cosA = gaussian_filter(cosA, sigma=sigma)
+        sinA = gaussian_filter(sinA, sigma=sigma)
+
+    # conv_cos = convolve2d(cosA, np.abs(kernel), mode=mode, boundary='symm')
+    # conv_sin = convolve2d(sinA, kernel, mode=mode, boundary='symm')
+    # aop_sobel = np.arctan(conv_sin/conv_cos) / 2.0
+    # aop_sobel[aop_sobel > np.pi / 2] = np.pi - aop_sobel[aop_sobel > np.pi / 2]
+    # aop_sobel[aop_sobel < -np.pi / 2] = -np.pi - aop_sobel[aop_sobel < -np.pi / 2]
+
+    ave_cos1 = convolve2d(cosA, kernel1, mode=mode, boundary='fill')
+    ave_cos2 = convolve2d(cosA, kernel2, mode=mode, boundary='fill')
+    ave_sin1 = convolve2d(sinA, kernel1, mode=mode, boundary='fill')
+    ave_sin2 = convolve2d(sinA, kernel2, mode=mode, boundary='fill')
+    aop_1 = np.arctan2(ave_sin1, ave_cos1) / 2.0
+    aop_2 = np.arctan2(ave_sin2, ave_cos2) / 2.0
+    aop_sobel = aop_1 - aop_2
+    aop_sobel[aop_sobel > np.pi/2] = np.pi - aop_sobel[aop_sobel > np.pi/2]
+    aop_sobel[aop_sobel < -np.pi/2] = -np.pi - aop_sobel[aop_sobel < -np.pi/2]
+    return aop_sobel
+
+def sobel_aop(aop, sigma=None, mode='same', center=True):
+    return [sobel_aop_single(aop, type='x', sigma=sigma, mode=mode, center=center),
+            sobel_aop_single(aop, type='y', sigma=sigma, mode=mode, center=center)]
+
+def gradmag_aop(aop, sigma=None, mode='same'):
+    gradients = np.array(sobel_aop(aop, sigma=sigma, mode=mode))
+    print(gradients.shape)
+    return np.sum(np.abs(gradients), axis=0)
+
+def laplacian_aop(aop, sigma=None, mode='same',diagonal=False):
+    if diagonal:
+        kernel = np.array([[1, 1, 1],
+                            [1, 0, 1],
+                            [1, 1, 1]])
+    else:
+        kernel = np.array([[0, 1, 0],
+                           [1, 0, 1],
+                           [0, 1, 0]])
+    cosA = np.cos(2 * aop)
+    sinA = np.sin(2 * aop)
+    if not sigma is None:
+        cosA = gaussian_filter(cosA, sigma=sigma)
+        sinA = gaussian_filter(sinA, sigma=sigma)
+    aop_smooth = np.arctan2(sinA, cosA) / 2.0
+    ave_cos = convolve2d(cosA, kernel, mode=mode, boundary='symm')
+    ave_sin = convolve2d(sinA, kernel, mode=mode, boundary='symm')
+    ave_aop = np.arctan2(ave_sin, ave_cos) / 2.0
+    aop_lap = ave_aop - aop_smooth
+    aop_lap[aop_lap > np.pi/2] = np.pi - aop_lap[aop_lap > np.pi/2]
+    aop_lap[aop_lap < -np.pi/2] = -np.pi - aop_lap[aop_lap < -np.pi/2]
+    return aop_lap
+
+def construct_matrix(shape, type="laplacian"):
+    ny, nx = shape
+    ntot = nx * ny
+    if type is "laplacian_diag":
+
+        M = diags([1, 1, 1, 1, -8, 1, 1, 1, 1], offsets=[-1 * (nx - 1),
+                                                         -1 * nx,
+                                                         -1 * (nx + 1),
+                                                         -1,
+                                                         0,
+                                                         1,
+                                                         nx - 1,
+                                                         nx,
+                                                         nx + 1],
+                  shape=(ntot, ntot),
+                  format='csc')
+    elif type is "laplacian":
+        # M = diags([1, 1, -4, 1, 1], offsets=[-1 * nx,
+        #                                      -1,
+        #                                      0,
+        #                                      1,
+        #                                      nx],
+        #           shape=(ntot, ntot),
+        #           format='csc')
+        A0_pattern = -4 * np.ones(nx, dtype='int')
+        A0_pattern[0] = -3
+        A0_pattern[-1] = -3
+        A0 = np.tile(A0_pattern, ny)
+        A0[:nx] += 1
+        A0[-nx:] += 1
+
+        A1_pattern = np.ones(nx, dtype='int')
+        A1_pattern[-1] = 0
+        A1 = np.tile(A1_pattern, ny)
+        A1 = A1[:-1]
+
+        Anx = np.ones(ntot-nx, dtype='int')
+
+        M = diags([A0, A1, A1, Anx, Anx], offsets=[0, 1, -1, nx, -1 * nx], format='csc')
+
+    elif type is 'gradient_x':
+        M = diags([1, 2, 1, -1, -2, -1], offsets=[-1,
+                                                  0,
+                                                  1,
+                                                  nx + 1,
+                                                  nx,
+                                                  nx - 1],
+                  shape=(ntot, ntot),
+                  format='csc')
+
+
+        # A0 = np.ones(ntot, dtype='int')
+        # # A0[:nx] = 0
+        # Anx = np.ones(ntot-nx, dtype='int')
+        # M = diags([A0, Anx], offsets=[0, nx], format='csc')
+
+    elif type is 'gradient_y':
+        M = diags([1, 2, 1, -1, -2, -1], offsets=[nx,
+                                                  0,
+                                                  -1 * nx,
+                                                  nx + 1,
+                                                  1,
+                                                  -1 * (nx - 1)],
+                  shape=(ntot, ntot),
+                  format='csc')
+    elif type is 'lap_xy':
+        A0_pattern = -2 * np.ones(nx, dtype='int')
+        A0_pattern[-1] = -1
+        A1_pattern = (A0_pattern + 1) * (-1)
+        A0 = np.tile(A0_pattern, ny)
+        A0[-nx:] += 1
+        A1 = np.tile(A1_pattern, ny)
+        A1 = A1[:-1]
+        Anx = np.ones(ntot-nx,dtype='int')
+        M = diags([A0, A1, Anx], offsets=[0, -1, -1 * nx],
+                  shape=(ntot, ntot),
+                  format='csc')
+
+    return M
 
 def aop_colors(isoluminant=False):
     if isoluminant:
