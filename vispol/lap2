@@ -5,7 +5,8 @@ import matplotlib.pyplot as plt
 from scipy.signal import convolve2d
 from scipy.ndimage import gaussian_filter
 from scipy.signal import wiener
-
+from scipy.sparse.linalg import inv as sparse_inverse
+from scipy.sparse import save_npz as sparse_save
 def ang_diff(D):
     P = np.pi
     return 1 - 2/P * np.abs((D + P/2) % (2 * P) - P)
@@ -159,6 +160,7 @@ M = vispol.construct_matrix(A.shape, type='laplacian')
 # plt.show()
 n, m = A.shape
 # M = vispol.construct_matrix(A.shape, type='laplacian')
+
 U = spsolve(M, L.reshape(n * m, 1)).reshape((n, m))
 U = (U - np.min(U)) / (np.max(U) - np.min(U))
 U_enhanced = (U - np.percentile(U, 1)) / (np.percentile(U, 99) - np.percentile(U, 1))

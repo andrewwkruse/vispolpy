@@ -198,11 +198,11 @@ def StokestoRGB(S,
         Jb = Jbounds(M, xspline, yspline)
         J = ItoJ(Ibar, Jb)
 
-    import matplotlib.pyplot as plt
-    f, ax = plt.subplots(1, 3)
-    ax[0].imshow(M, vmin=0, vmax=40)
-    ax[1].imshow(Pbar, vmin=0, vmax=1)
-    ax[2].imshow(J, vmin=0, vmax=100)
+    # import matplotlib.pyplot as plt
+    # f, ax = plt.subplots(1, 3)
+    # ax[0].imshow(M, vmin=0, vmax=40)
+    # ax[1].imshow(Pbar, vmin=0, vmax=1)
+    # ax[2].imshow(J, vmin=0, vmax=100)
 
     h = Atoh(Abar)
     J, a, b = JMhtoJab(J, M, h)
@@ -243,3 +243,9 @@ def IPAtoRGB(I, P = None, A = None, **kwargs):
     else:
         RGB = StokestoRGB(Stokes, **kwargs)
         return RGB
+
+def IAtoRGB(I, A, **kwargs):
+    P = 0.85 * np.ones_like(I)
+    return IPAtoRGB(I, P, A, **kwargs)
+
+# def IPtoRGB()
