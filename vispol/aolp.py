@@ -1,9 +1,13 @@
 import numpy as np
 from .deltametric import delta, delta_aop, dmask
-from scipy.signal import convolve2d
+from scipy.sparse.linalg import spsolve
 from scipy.ndimage import gaussian_filter
 from scipy.signal import convolve2d
 from scipy.sparse import diags
+from matplotlib.colors import LinearSegmentedColormap as lsc
+from matplotlib.cm import register_cmap as rc
+import matplotlib.pyplot as plt
+from matplotlib.colors import Colormap
 
 def circular_mean(angles, weights=None, interval='auto'):
     weight_err = 'Weights must be an array or list with the same size as the input array of angles or None'
@@ -180,9 +184,6 @@ def colormap(isoluminant=False):
     # colors have been copy-pasted for efficiency from calculations made by author
     # see "Polarization-color mapping strategies: catching up with color theory" by Kruse et al
 
-    from matplotlib.colors import LinearSegmentedColormap as lsc
-    from matplotlib.cm import register_cmap as rc
-
     colors = aop_colors(isoluminant)
 
     name = "isoluminantAoP" if isoluminant else "AoP"
@@ -349,9 +350,11 @@ def colormap_delta(aop,
                    background=[0.0,0.0,0.0],
                    deltas = None,
                    method='opacity',
+                   cmap=None,
                    isoluminant=False,
                    interval='auto',
                    **kwargs):
+
     if method in ['opacity', 'Opacity']:
         mask = False
     elif method in ['mask', 'Mask']:
@@ -402,7 +405,15 @@ def colormap_delta(aop,
             raise ValueError(interr)
 
     aop_pi = np.pi * (aop - bottom) / (top - bottom)
-    cmap = colormap(isoluminant)
+
+    if cmap is not None:
+        if isinstance(cmap, Colormap):
+            pass
+        else:
+            cmap = plt.get_cmap(cmap)
+    else:
+        cmap = colormap(isoluminant)
+
     colors = cmap(aop_pi / np.pi)
     if deltas is None:
         delta_array = delta_aop(aop_pi, element=kwargs['element']) if 'element' in kwargs else delta_aop(aop_pi)
@@ -520,28 +531,37 @@ def gradmag_aop(aop, sigma=None, mode='same'):
     print(gradients.shape)
     return np.sum(np.abs(gradients), axis=0)
 
-def laplacian_aop(aop, sigma=None, mode='same',diagonal=False):
-    if diagonal:
-        kernel = np.array([[1, 1, 1],
-                            [1, 0, 1],
-                            [1, 1, 1]])
-    else:
-        kernel = np.array([[0, 1, 0],
-                           [1, 0, 1],
-                           [0, 1, 0]])
-    cosA = np.cos(2 * aop)
-    sinA = np.sin(2 * aop)
-    if not sigma is None:
-        cosA = gaussian_filter(cosA, sigma=sigma)
-        sinA = gaussian_filter(sinA, sigma=sigma)
-    aop_smooth = np.arctan2(sinA, cosA) / 2.0
-    ave_cos = convolve2d(cosA, kernel, mode=mode, boundary='symm')
-    ave_sin = convolve2d(sinA, kernel, mode=mode, boundary='symm')
-    ave_aop = np.arctan2(ave_sin, ave_cos) / 2.0
-    aop_lap = ave_aop - aop_smooth
-    aop_lap[aop_lap > np.pi/2] = np.pi - aop_lap[aop_lap > np.pi/2]
-    aop_lap[aop_lap < -np.pi/2] = -np.pi - aop_lap[aop_lap < -np.pi/2]
-    return aop_lap
+def inverse_lap(aop):
+    L = laplacian_aop(aop)
+    n, m = aop.shape
+    M, *_ = construct_matrix((n, m), type='laplacian')
+    U = spsolve(M, L.reshape(n * m, 1)).reshape((n, m))
+    return U
+
+def laplacian_aop(aop):
+    def ang_diff(D):
+        AD = np.sin(D)
+        # AD = np.sign(AD) * (np.abs(AD)**0.5)
+        return AD
+    x_neg = np.array([[0, 0, 0],
+                      [0, -1, 1],
+                      [0, 0, 0]])
+    x_pos = np.array([[0, 0, 0],
+                      [1, -1, 0],
+                      [0, 0, 0]])
+    y_neg = np.array([[0, 0, 0],
+                      [0, -1, 0],
+                      [0, 1, 0]])
+    y_pos = np.array([[0, 1, 0],
+                      [0, -1, 0],
+                      [0, 0, 0]])
+
+    L = np.zeros_like(aop)
+
+    for kernel in [x_neg, x_pos, y_neg, y_pos]:
+        L += ang_diff(convolve2d(aop, kernel, mode='same', boundary='symm'))
+
+    return L
 
 def construct_matrix(shape, type="laplacian"):
     ny, nx = shape

@@ -19,10 +19,7 @@ from scipy import optimize
 from scipy.sparse import diags
 from scipy.sparse.linalg import splu
 
-def ang_diff(D):
-    AD = np.sin(D)
-    # AD = np.sign(AD) * (np.abs(AD)**0.5)
-    return AD
+
 
     # P = np.pi
     # return 1 - 2/P * np.abs((D + P/2) % (2 * P) - P)
@@ -118,16 +115,11 @@ class gauss_seidel:
         self.iterations = iterations
 
 vispol.register_cmaps()
-data_folder = 'c:/users/z5052714/documents/unsw/unsw/data_sets/'
+# data_folder = 'c:/users/z5052714/documents/unsw/unsw/data_sets/'
 # filename = data_folder + 'forscottfrommeredith/162041.L1B2.v006.hdf5'
 # filename = data_folder + 'forscottfrommeredith/162651.L1B2.v006.hdf5'
-filename = data_folder + 'forscottfrommeredith/094821.L1B2.v006.hdf5'
-I, P, A = rm.getIPA(filename, start=[2, 32], end=[3900, 1403])
-# I, P, A = rm.getIPA(filename, start=[2, 32], end=[3000, 1403])
-# I, P, A = rm.getIPA(filename, start=[1000, 800], end=[1600, 1300])
-# I, P, A = rm.getIPA(filename, start=[2000, 150], end=[2010, 160]) # looks great
-# _, _, A = rm.getIPA(filename, start=[1500, 150], end=[2200, 450]) # looks good with scaling
-# _, _, A = rm.getIPA(filename, start=[2, 150], end=[2600, 1000])
+# filename = data_folder + 'forscottfrommeredith/094821.L1B2.v006.hdf5'
+
 # I = np.clip(I/np.percentile(I,99), 0, 1)
 A *= np.pi/180.0
 A[A > np.pi] -= np.pi
@@ -203,20 +195,8 @@ sigma = 2
 # Ld /= np.percentile(np.abs(Ld), cap)
 # Ld = np.clip(Ld, -1, 1)
 
-x_neg = np.array([[0, 0, 0],
-                  [0, -1, 1],
-                  [0, 0, 0]])
-x_pos = np.array([[0, 0, 0],
-                  [1, -1, 0],
-                  [0, 0, 0]])
-y_neg = np.array([[0, 0, 0],
-                  [0, -1, 0],
-                  [0, 1, 0]])
-y_pos = np.array([[0, 1, 0],
-                  [0, -1, 0],
-                  [0, 0, 0]])
 
-L = np.zeros_like(A)
+
 
 # plt.imshow(medfilt2d(delta, 7))
 # plt.show()
@@ -263,7 +243,6 @@ for kernel in [x_neg, x_pos, y_neg, y_pos]:
 
 # plt.show()
 
-n, m = A.shape
 
 # opt_results = optimize.minimize(obj_fun,
 #                                 x0 = np.ones_like(L),
@@ -297,7 +276,6 @@ M, Dmat, Lmat, Umat = vispol.construct_matrix(A.shape, type='laplacian')
 # plt.figure()
 # plt.imshow(Id)
 # plt.show()
-U = spsolve(M, L.reshape(n * m, 1)).reshape((n, m))
 # U -= np.median(U)
 #
 # U /= 2 * np.max(np.abs(U))

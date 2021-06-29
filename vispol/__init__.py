@@ -1,5 +1,5 @@
 from .aolp import StokestoAoLP, colormap, colormap_delta, colormap_delta_Stokes, StokestoAoLP_masked, histogram_eq, \
-                  histogram_eq_Stokes, LUT_matching, detect_range, circular_mean, laplacian_aop, sobel_aop, construct_matrix
+                  histogram_eq_Stokes, LUT_matching, detect_range, circular_mean, laplacian_aop, inverse_lap, construct_matrix
 
 from .colormaps import register_cmaps, cbar
 
